@@ -1,22 +1,30 @@
 autohome:
-  url: https://samplehost
-  home: home GUID from auto-home-server
-  api_key: API key from auto-home-server
+  url: https://autohomehost
+  home: autohome home GUID
+  api_key: autohome API key
 
 zones:
-  - id: zone GUID from auto-home-server
-    name: main floor
-    inputs:
+  - id: autohome zone GUID
+    name: zone name
+    devices:
       - name: thermometer
         type: temperature
-        unit: celsius
-        interface: ds18x20
-        pin: deviceIdFrom from /sys/bus/w1/devices
-        calibrate: 1.5
-    outputs:
+        direction: input
+        data:
+          unit: celsius
+          interface: ds18x20
+          address: 28-02199245d188
+          calibrate: 1.5
+          threshold: 0.2
       - name: heater
-        type: temperature
-        interface: gpio
-        pin: 17
-        threshold: 0.2
+        type: on-off
+        direction: output
+        data:
+          interface: gpio
+          address: 17
+          changes:
+            - device: thermometer
+              direction: increase
+          
+          
 
