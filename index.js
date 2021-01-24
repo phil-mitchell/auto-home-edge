@@ -46,8 +46,6 @@ async function readInput( input ) {
 }
 
 async function loadZone( zone ) {
-    let etag = zone['@etag'];
-
     if( config.autohome ) {
         try {
             let url = `${config.autohome.url}/api/homes/${config.autohome.home}/zones/${zone.id}`;
@@ -68,14 +66,10 @@ async function loadZone( zone ) {
         }
     }
 
-    if( !etag || etag !== zone['@etag'] ) {
-        for( let device of zone.devices ) {
-            if( !device.gpio && device.data.interface === 'gpio' ) {
-                device.gpio = new Gpio( device.data.address, 'out' );
-            }
+    for( let device of zone.devices ) {
+        if( !device.gpio && device.data.interface === 'gpio' ) {
+            device.gpio = new Gpio( device.data.address, 'out' );
         }
-
-        zone['@etag'] = zone['@etag'] || 'initialized';
     }
 
     let changes = {};
