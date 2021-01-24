@@ -164,22 +164,25 @@ async function update( reset ) {
             }
         }
 
-        console.log( JSON.stringify( changes ) );
-
         for( let output of( zone.devices || [] ).filter(
             x => x.direction === 'output' || x.direction === 'in/out'
         ) ) {
+            console.log( `Checking desired state for ${output.name}` );
             let newValue = null;
 
             for( let change of ( output.data.changes || [] ) ) {
                 if( changes[change.device] ) {
+                    console.log( `${output.name} will ${change.direction} ${change.device}` );
                     newValue = newValue || changes[change.device] === change.direction;
                 }
             }
 
             if( !reset && newValue == null ) {
                 console.log( `No changes required for ${output.name}` );
+                continue;
             }
+
+            console.log( `Desired state for ${output.name} is ${newValue}` );
 
             if( output.gpio ) {
                 await setGPIO( output.gpio, newValue );
