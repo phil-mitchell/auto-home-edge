@@ -11,6 +11,7 @@
   "dependencies": {
     "config": "^3.3.3",
     "ds18x20": "^0.2.0",
+    "fs-extra": "^9.1.0",
     "js-yaml": "^4.0.0",
     "onoff": "^6.0.1",
     "superagent": "^6.1.0",

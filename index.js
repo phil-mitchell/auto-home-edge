@@ -2,7 +2,8 @@ var Gpio = require( 'onoff' ).Gpio;
 var ds18x20 = require( 'ds18x20' );
 var config = require( 'config' );
 var superagent = require( 'superagent' );
-var YAML = require( 'yaml' );
+var path = require( 'path' );
+var fs = require( 'fs-extra' );
 
 async function setGPIO( output, on ) {
     console.log( `Turning ${ on ? 'ON' : 'OFF' } GPIO ${output._gpio}` );
@@ -32,10 +33,10 @@ async function readInput( input ) {
     try {
         input.current = {
             value: null,
-            unit: input.data.unit
+            unit: ( input.data || {}).unit || 'celsius'
         };
-        if( input.data.interface === 'ds18x20' ) {
-            input.current.value = ( await readDS18x20( input.data.address ) ) + ( input.data.calibrate || 0 );
+        if( ( input.interface || {}).type === 'ds18x20' ) {
+            input.current.value = ( await readDS18x20( input.interface.address ) ) + ( input.calibrate || 0 );
         }
         console.log( `Current value from ${input.name}: ${input.current.value} ${input.current.unit}` );
     } catch( e ) {
@@ -45,30 +46,39 @@ async function readInput( input ) {
     return input.current;
 }
 
+async function saveConfig() {
+    let configfile = path.join(
+        path.dirname( config.util.getConfigSources()[0].name ),
+        `local-${process.env.NODE_CONFIG_ENV || process.env.NODE_ENV || 'development'}.json` );
+
+    await fs.writeJson( configfile, config.util.toObject() );
+}
+
 async function loadZone( zone ) {
     if( config.autohome ) {
         try {
             let url = `${config.autohome.url}/api/homes/${config.autohome.home}/zones/${zone.id}`;
 
             let updates = ( await superagent.get( url ).query({ api_key: config.autohome.api_key }) ).body;
-            for( let deviceUpdates of updates.devices ) {
-                deviceUpdates.data = YAML.parse( deviceUpdates.data || '{}' );
+            for( let deviceUpdates of ( updates.devices || [] ) ) {
+                deviceUpdates.data = deviceUpdates.data || {};
                 for( let device of zone.devices ) {
                     if( device.name === deviceUpdates.name ) {
-                        deviceUpdates.data = Object.assign( device.data, deviceUpdates.data );
+                        deviceUpdates.data = Object.assign( device.data || {}, deviceUpdates.data || {});
                     }
                 }
             }
 
             Object.assign( zone, updates );
         } catch( e ) {
-            console.error( `Error updating config for zone ${zone.name} from autohome: ${e.message}` );
+            console.error( `Error updating config for zone ${zone.name} from autohome: ${e.stack}` );
         }
     }
 
     for( let device of zone.devices ) {
-        if( !device.gpio && device.data.interface === 'gpio' ) {
-            device.gpio = new Gpio( device.data.address, 'out' );
+        if( !device.gpio && ( device.interface || {}).type === 'gpio' ) {
+            device.gpio = new Gpio( device.interface.address, 'out' );
+            config.util.makeHidden( device, 'gpio' );
         }
     }
 
@@ -77,7 +87,7 @@ async function loadZone( zone ) {
     let day = now.getDay();
     let time = now.toTimeString().slice( 0, 5 );
 
-    for( let schedule of zone.schedules ) {
+    for( let schedule of ( zone.schedules || [] ) ) {
         if( schedule.days.indexOf( now.getDay() ) > -1 ) {
             if( schedule.start <= time ) {
                 for( let change of schedule.changes ) {
@@ -89,7 +99,7 @@ async function loadZone( zone ) {
         }
     }
 
-    for( let override of zone.overrides ) {
+    for( let override of ( zone.overrides || [] ) ) {
         if( new Date( override.start ) <= now && new Date( override.end ) >= now ) {
             for( let change of override.changes ) {
                 changes[change.device] = change.value;
@@ -100,6 +110,8 @@ async function loadZone( zone ) {
     for( let device of zone.devices ) {
         device.target = changes[device.name] || {};
     }
+
+    await saveConfig();
 }
 
 async function addSensorReading( zone, sensor, type, value, data ) {
@@ -111,8 +123,7 @@ async function addSensorReading( zone, sensor, type, value, data ) {
                 time: new Date().toISOString(),
                 sensor,
                 type,
-                value: value.value,
-                unit: value.unit,
+                value,
                 data
             });
         } catch( e ) {
@@ -139,7 +150,7 @@ async function update( reset ) {
         for( let device of ( zone.devices || [] ) ) {
             let current = ( device.current || {}).value;
             let target = ( device.target || {}).value;
-            let threshold = ( device.data || {}).threshold || 0;
+            let threshold = device.threshold || 0;
             if( current == null || target == null ) {
                 // either current reading is unknown or no target is set
                 // so we don't need to do anything (or at least we don't know what to do)
@@ -164,7 +175,7 @@ async function update( reset ) {
             console.log( `Checking desired state for ${output.name}` );
             let newValue = null;
 
-            for( let change of ( output.data.changes || [] ) ) {
+            for( let change of ( output.changes || [] ) ) {
                 if( changes[change.device] ) {
                     console.log( `${output.name} will ${change.direction} ${change.device}` );
                     newValue = newValue || changes[change.device] === change.direction;
