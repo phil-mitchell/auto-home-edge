@@ -115,13 +115,13 @@ async function loadZone( zone ) {
     }
 
     for( let device of zone.devices ) {
-        device.target = changes[device.name] || {};
+        device.target = changes[device.name];
     }
 
     await saveConfig();
 }
 
-async function addSensorReading( zone, sensor, type, value, data ) {
+async function addSensorReading( zone, sensor, type, value, target, data ) {
     if( config.autohome ) {
         try {
             let url = `${config.autohome.url}/api/homes/${config.autohome.home}/zones/${zone.id}/addSensorReading`;
@@ -131,6 +131,7 @@ async function addSensorReading( zone, sensor, type, value, data ) {
                 sensor,
                 type,
                 value,
+                target,
                 data
             });
         } catch( e ) {
@@ -149,7 +150,7 @@ async function update( reset ) {
         ) ) {
             await readInput( input );
             if( input.current.value != null ) {
-                await addSensorReading( zone, input.name, input.type, input.current );
+                await addSensorReading( zone, input.name, input.type, input.current, input.target );
             }
         }
 
