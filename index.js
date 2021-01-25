@@ -65,6 +65,10 @@ async function loadZone( zone ) {
                 for( let device of zone.devices ) {
                     if( device.name === deviceUpdates.name ) {
                         deviceUpdates.data = Object.assign( device.data || {}, deviceUpdates.data || {});
+                        if( device.gpio ) {
+                            deviceUpdates.gpio = device.gpio;
+                            config.util.makeHidden( deviceUpdates, 'gpio' );
+                        }
                     }
                 }
             }
@@ -76,9 +80,12 @@ async function loadZone( zone ) {
     }
 
     for( let device of zone.devices ) {
-        if( !device.gpio && ( device.interface || {}).type === 'gpio' ) {
-            device.gpio = new Gpio( device.interface.address, 'out' );
-            config.util.makeHidden( device, 'gpio' );
+        if( ( device.interface || {}).type === 'gpio' ) {
+            if( ( device.gpio || {})._gpio !== device.interface.address ) {
+                console.log( `Constructing GPIO for pin ${device.interface.address}` );
+                device.gpio = new Gpio( device.interface.address, 'out' );
+                config.util.makeHidden( device, 'gpio' );
+            }
         }
     }
 
