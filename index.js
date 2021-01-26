@@ -62,7 +62,7 @@ async function loadZone( zone ) {
             let updates = ( await superagent.get( url ).query({ api_key: config.autohome.api_key }) ).body;
             for( let deviceUpdates of ( updates.devices || [] ) ) {
                 deviceUpdates.data = deviceUpdates.data || {};
-                for( let device of zone.devices ) {
+                for( let device of ( zone.devices || [] ) ) {
                     if( device.name === deviceUpdates.name ) {
                         deviceUpdates.data = Object.assign( device.data || {}, deviceUpdates.data || {});
                         if( device.gpio ) {
@@ -114,7 +114,7 @@ async function loadZone( zone ) {
         }
     }
 
-    for( let device of zone.devices ) {
+    for( let device of ( zone.devices || [] ) ) {
         device.target = changes[device.name];
     }
 
