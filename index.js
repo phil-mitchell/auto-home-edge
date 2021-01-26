@@ -79,7 +79,7 @@ async function loadZone( zone ) {
         }
     }
 
-    for( let device of zone.devices ) {
+    for( let device of ( zone.devices || [] ) ) {
         if( ( device.interface || {}).type === 'gpio' ) {
             if( ( device.gpio || {})._gpio !== device.interface.address ) {
                 console.log( `Constructing GPIO for pin ${device.interface.address}` );
