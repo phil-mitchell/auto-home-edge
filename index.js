@@ -1,9 +1,12 @@
 var Gpio = require( 'onoff' ).Gpio;
 var ds18x20 = require( 'ds18x20' );
+var dht = require( 'node-dht-sensor' ).promises;
 var config = require( 'config' );
 var superagent = require( 'superagent' );
 var path = require( 'path' );
 var fs = require( 'fs-extra' );
+
+dht.setMaxRetries( 10 );
 
 async function setGPIO( output, on ) {
     console.log( `Turning ${ on ? 'ON' : 'OFF' } GPIO ${output._gpio}` );
@@ -29,14 +32,34 @@ async function readDS18x20( id ) {
     });
 }
 
+async function readDHT11( id, type ) {
+    let res = await dht.read( 11, id );
+    return res[type];
+}
+
+async function readDHT22( id, type ) {
+    let res = await dht.read( 22, id );
+    return res[type];
+}
+
 async function readInput( input ) {
     try {
         input.current = {
             value: null,
             unit: ( input.data || {}).unit || 'celsius'
         };
-        if( ( input.interface || {}).type === 'ds18x20' ) {
+        switch( ( input.interface || {}).type ) {
+        case'ds18x20':
             input.current.value = ( await readDS18x20( input.interface.address ) ) + ( input.calibrate || 0 );
+            break;
+        case'dht11':
+            input.current.value = ( await readDHT11( input.interface.address, input.type ) ) + ( input.calibrate || 0 );
+            break;
+        case 'dht22':
+            input.current.value = ( await readDHT22( input.interface.address, input.type ) ) + ( input.calibrate || 0 );
+            break;
+        default:
+            console.warn( `Unknown interface type for ${input.name}: ${( input.interface || {}).type}` );
         }
         console.log( `Current value from ${input.name}: ${input.current.value} ${input.current.unit}` );
     } catch( e ) {
@@ -81,11 +104,18 @@ async function loadZone( zone ) {
 
     for( let device of ( zone.devices || [] ) ) {
         if( ( device.interface || {}).type === 'gpio' ) {
-            if( ( device.gpio || {})._gpio !== device.interface.address ) {
-                console.log( `Constructing GPIO for pin ${device.interface.address}` );
-                device.gpio = new Gpio( device.interface.address, 'out' );
-                config.util.makeHidden( device, 'gpio' );
+            let pins = ( device.interface.address || '' ).split( ',' );
+            let gpio = {};
+            for( let pin of pins ) {
+                if( ( device.gpio || {})[pin] ) {
+                    gpio[pin] = device.gpio[pin];
+                } else {
+                    console.log( `Constructing GPIO for pin ${device.interface.address}` );
+                    gpio[pin] = new Gpio( pin, 'out' );
+                }
             }
+            device.gpio = gpio;
+            config.util.makeHidden( device, 'gpio' );
         }
     }
 
@@ -198,7 +228,7 @@ async function update( reset ) {
             console.log( `Desired state for ${output.name} is ${newValue}` );
 
             if( output.gpio ) {
-                await setGPIO( output.gpio, newValue );
+                await Promise.all( Object.values( output.gpio ).map( gpio => setGPIO( gpio, newValue ) ) );
                 await addSensorReading( zone, output.name, 'on-off', { value: newValue ? 1 : 0 });
             }
         }
@@ -214,7 +244,7 @@ async function exitHandler( options, exitCode ) {
         for( let output of ( zone.devices || [] ) ) {
             if( output.gpio ) {
                 try {
-                    await setGPIO( output.gpio, false );
+                    await Promise.all( Object.values( output.gpio ).map( gpio => setGPIO( gpio, false ) ) );
                 } catch( e ) {
                     console.error( e.stack );
                 }
