@@ -46,8 +46,20 @@ async function readInput( input ) {
     try {
         input.current = {
             value: null,
-            unit: ( input.data || {}).unit || 'celsius'
+            unit: ( input.data || {}).unit
         };
+
+        if( !input.current.unit ) {
+            switch( input.type ) {
+            case'temperature':
+                input.current.unit = 'celsius';
+                break;
+            case'humidity':
+                input.current.unit = 'percent';
+                break;
+            }
+        }
+
         switch( ( input.interface || {}).type ) {
         case'ds18x20':
             input.current.value = ( await readDS18x20( input.interface.address ) ) + ( input.calibrate || 0 );
@@ -83,11 +95,18 @@ async function loadZone( zone ) {
             let url = `${config.autohome.url}/api/homes/${config.autohome.home}/zones/${zone.id}`;
 
             let updates = ( await superagent.get( url ).query({ api_key: config.autohome.api_key }) ).body;
-            for( let deviceUpdates of ( updates.devices || [] ) ) {
-                deviceUpdates.data = deviceUpdates.data || {};
+            Object.assign( zone, updates );
+        } catch( e ) {
+            console.error( `Error updating config for zone ${zone.name} from autohome: ${e.stack}` );
+        }
+
+        try {
+            let url = `${config.autohome.url}/api/homes/${config.autohome.home}/zones/${zone.id}/devices`;
+
+            let updates = ( await superagent.get( url ).query({ api_key: config.autohome.api_key }) ).body;
+            for( let deviceUpdates of ( updates || [] ) ) {
                 for( let device of ( zone.devices || [] ) ) {
-                    if( device.name === deviceUpdates.name ) {
-                        deviceUpdates.data = Object.assign( device.data || {}, deviceUpdates.data || {});
+                    if( device.id === deviceUpdates.id ) {
                         if( device.gpio ) {
                             deviceUpdates.gpio = device.gpio;
                             config.util.makeHidden( deviceUpdates, 'gpio' );
@@ -96,9 +115,8 @@ async function loadZone( zone ) {
                 }
             }
 
-            Object.assign( zone, updates );
+            zone.devices = updates;
         } catch( e ) {
-            console.error( `Error updating config for zone ${zone.name} from autohome: ${e.stack}` );
         }
     }
 
@@ -110,7 +128,7 @@ async function loadZone( zone ) {
                 if( ( device.gpio || {})[pin] ) {
                     gpio[pin] = device.gpio[pin];
                 } else {
-                    console.log( `Constructing GPIO for pin ${device.interface.address}` );
+                    console.log( `Constructing GPIO for pin ${pin}` );
                     gpio[pin] = new Gpio( pin, 'out' );
                 }
             }
@@ -151,21 +169,21 @@ async function loadZone( zone ) {
     await saveConfig();
 }
 
-async function addSensorReading( zone, sensor, type, value, target, data ) {
+async function addSensorReading( zone, device, value, target, data ) {
     if( config.autohome ) {
         try {
-            let url = `${config.autohome.url}/api/homes/${config.autohome.home}/zones/${zone.id}/addSensorReading`;
+            let url = `${config.autohome.url}/api/homes/${config.autohome.home}/zones/${zone.id}/devices/${device.id}/addSensorReading`;
 
             await superagent.post( url ).query({ api_key: config.autohome.api_key }).send({
                 time: new Date().toISOString(),
-                sensor,
-                type,
+                type: device.type,
                 value,
                 target,
                 data
             });
         } catch( e ) {
-            console.error( `Error uploading sensor reading for ${sensor}: ${e.message}` );
+            console.error( `Error uploading sensor reading for ${device.name}: ${e.message}` );
+            console.error( e );
         }
     }
 }
@@ -180,7 +198,7 @@ async function update( reset ) {
         ) ) {
             await readInput( input );
             if( input.current.value != null ) {
-                await addSensorReading( zone, input.name, input.type, input.current, input.target );
+                await addSensorReading( zone, input, input.current, input.target );
             }
         }
 
@@ -215,7 +233,7 @@ async function update( reset ) {
 
             for( let change of ( output.changes || [] ) ) {
                 if( changes[change.device] ) {
-                    console.log( `${output.name} will ${change.direction} ${change.device}` );
+                    console.log( `${output.name} would ${change.direction} ${change.device}` );
                     newValue = newValue || changes[change.device] === change.direction;
                 }
             }
@@ -229,7 +247,7 @@ async function update( reset ) {
 
             if( output.gpio ) {
                 await Promise.all( Object.values( output.gpio ).map( gpio => setGPIO( gpio, newValue ) ) );
-                await addSensorReading( zone, output.name, 'on-off', { value: newValue ? 1 : 0 });
+                await addSensorReading( zone, output, { value: newValue ? 1 : 0 });
             }
         }
     }
