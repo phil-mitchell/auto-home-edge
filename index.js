@@ -163,7 +163,7 @@ async function loadZone( zone ) {
     }
 
     for( let device of ( zone.devices || [] ) ) {
-        device.target = changes[device.name];
+        device.target = changes[device.id];
     }
 
     await saveConfig();
