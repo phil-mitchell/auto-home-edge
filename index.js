@@ -216,10 +216,10 @@ async function update( reset ) {
 
             if( current <= ( target - threshold ) ) {
                 console.log( `Device ${device.name} has value ${current} which is more than ${threshold} below ${target}` );
-                changes[device.name] = 'increase';
+                changes[device.id] = 'increase';
             } else if( current >= ( target + threshold ) ) {
                 console.log( `Device ${device.name} has value ${current} which is more than ${threshold} above ${target}` );
-                changes[device.name] = 'decrease';
+                changes[device.id] = 'decrease';
             } else {
                 console.log( `Device ${device.name} has value ${current} which is within ${threshold} of ${target}` );
             }
