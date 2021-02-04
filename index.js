@@ -5,6 +5,9 @@ var config = require( 'config' );
 var superagent = require( 'superagent' );
 var path = require( 'path' );
 var fs = require( 'fs-extra' );
+var MQTT = require( 'async-mqtt' );
+
+var client = null;
 
 dht.setMaxRetries( 10 );
 
@@ -170,26 +173,36 @@ async function loadZone( zone ) {
 }
 
 async function addSensorReading( zone, device, value, target, data ) {
-    if( config.autohome ) {
+    if( client ) {
         try {
-            let url = `${config.autohome.url}/api/homes/${config.autohome.home}/zones/${zone.id}/devices/${device.id}/addSensorReading`;
-
-            await superagent.post( url ).query({ api_key: config.autohome.api_key }).send({
-                time: new Date().toISOString(),
-                type: device.type,
-                value,
-                target,
-                data
-            });
+            await client.publish(
+                `homes/${( config.autohome || {}).home || 'local'}/zones/${zone.id}/devices/${device.id}/${device.type}`, JSON.stringify({
+                    time: new Date().toISOString(),
+                    value,
+                    target,
+                    data
+                }), {
+                    qos: 1,
+                    retain: true
+                });
         } catch( e ) {
-            console.error( `Error uploading sensor reading for ${device.name}: ${e.message}` );
+            console.error( `Error publishing sensor reading for ${device.name}: ${e.message}` );
             console.error( e );
         }
     }
 }
 
-
 async function update( reset ) {
+    if( !client ) {
+        try {
+            console.log( `Attempting to connect to MQTT broker` );
+            client = await MQTT.connectAsync( ( config.mqtt || {}).url, ( config.mqtt || {}).options );
+            config.util.makeHidden( config, 'mqtt' );
+        } catch( e ) {
+            console.error( `Unable to connect to MQTT broker, continuing off-line: ${e.stack}` );
+        }
+    }
+
     for( let zone of config.zones ) {
         await loadZone( zone );
 

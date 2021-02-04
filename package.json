@@ -9,6 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "async-mqtt": "^2.6.1",
     "config": "^3.3.3",
     "ds18x20": "^0.2.0",
     "fs-extra": "^9.1.0",
