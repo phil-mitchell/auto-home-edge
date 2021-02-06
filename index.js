@@ -92,11 +92,43 @@ async function saveConfig() {
     await fs.writeJson( configfile, config.util.toObject() );
 }
 
+async function updateZone( zone, updates ) {
+    console.log( `Updating configuration for zone ${zone.name} (${zone.id})` );
+    Object.assign( zone, updates );
+}
+
+async function updateDevice( device, deviceUpdates ) {
+    console.log( `Updating configuration for device ${device.name} (${device.id})` );
+    if( device.gpio ) {
+        deviceUpdates.gpio = device.gpio;
+        config.util.makeHidden( deviceUpdates, 'gpio' );
+    }
+
+    Object.assign( device, deviceUpdates );
+
+    if( ( device.interface || {}).type === 'gpio' ) {
+        let pins = ( device.interface.address || '' ).split( ',' );
+        let gpio = {};
+        for( let pin of pins ) {
+            if( ( device.gpio || {})[pin] ) {
+                gpio[pin] = device.gpio[pin];
+            } else {
+                console.log( `Constructing GPIO for pin ${pin}` );
+                gpio[pin] = new Gpio( pin, 'out' );
+            }
+        }
+        device.gpio = gpio;
+        config.util.makeHidden( device, 'gpio' );
+    }
+}
+
 async function loadZone( zone ) {
+    let devices = zone.devices;
     if( config.autohome ) {
         try {
             let url = `${config.autohome.url}/api/homes/${config.autohome.home}/zones/${zone.id}`;
 
+            console.log( `Loading zone information from ${url}` );
             let updates = ( await superagent.get( url ).query({ api_key: config.autohome.api_key }) ).body;
             Object.assign( zone, updates );
         } catch( e ) {
@@ -106,40 +138,24 @@ async function loadZone( zone ) {
         try {
             let url = `${config.autohome.url}/api/homes/${config.autohome.home}/zones/${zone.id}/devices`;
 
-            let updates = ( await superagent.get( url ).query({ api_key: config.autohome.api_key }) ).body;
-            for( let deviceUpdates of ( updates || [] ) ) {
-                for( let device of ( zone.devices || [] ) ) {
-                    if( device.id === deviceUpdates.id ) {
-                        if( device.gpio ) {
-                            deviceUpdates.gpio = device.gpio;
-                            config.util.makeHidden( deviceUpdates, 'gpio' );
-                        }
-                    }
-                }
-            }
-
-            zone.devices = updates;
+            console.log( `Loading device information from ${url}` );
+            devices = ( await superagent.get( url ).query({ api_key: config.autohome.api_key }) ).body;
         } catch( e ) {
         }
     }
 
-    for( let device of ( zone.devices || [] ) ) {
-        if( ( device.interface || {}).type === 'gpio' ) {
-            let pins = ( device.interface.address || '' ).split( ',' );
-            let gpio = {};
-            for( let pin of pins ) {
-                if( ( device.gpio || {})[pin] ) {
-                    gpio[pin] = device.gpio[pin];
-                } else {
-                    console.log( `Constructing GPIO for pin ${pin}` );
-                    gpio[pin] = new Gpio( pin, 'out' );
-                }
+    for( let deviceUpdates of ( devices || [] ) ) {
+        for( let device of ( zone.devices || [] ) ) {
+            if( device.id === deviceUpdates.id ) {
+                await updateDevice( device, deviceUpdates );
             }
-            device.gpio = gpio;
-            config.util.makeHidden( device, 'gpio' );
         }
     }
 
+    zone.devices = devices;
+}
+
+async function computeTargetsForZone( zone ) {
     let changes = {};
     let now = new Date();
     let day = now.getDay();
@@ -192,19 +208,64 @@ async function addSensorReading( zone, device, value, target, data ) {
     }
 }
 
+async function handleMQTTMessage( topic, payload ) {
+    try {
+        topic = topic.split( '/' );
+        payload = JSON.parse( payload.toString( 'utf-8' ) );
+
+        let zoneId = topic[3];
+        let zone = config.zones.filter( z => z.id === zoneId )[0];
+        let operation = topic[4];
+        let updated = false;
+        if( operation === 'zoneUpdated' ) {
+            await updateZone( zone, payload );
+            updated = true;
+        } else if( operation === 'deviceUpdated' ) {
+            let device = zone.devices.filter( d => d.id === payload.id )[0];
+            if( device ) {
+                await updateDevice( device, payload );
+                updated = true;
+            }
+        } else if( operation === 'deviceCreated' ) {
+            await updateDevice( payload, payload );
+            zone.devices.push( payload );
+            updated = true;
+        } else if( operation === 'deviceRemoved' ) {
+            zone.devices = zone.devices.filter( d => d.id !== payload.id )[0];
+            updated = true;
+        }
+
+        if( updated ) {
+            await update();
+        }
+    } catch( e ) {
+        console.error( `Error handling message for topic ${topic}: ${e.stack}` );
+    }
+}
+
 async function update( reset ) {
     if( !client ) {
         try {
             console.log( `Attempting to connect to MQTT broker` );
             client = await MQTT.connectAsync( ( config.mqtt || {}).url, ( config.mqtt || {}).options );
-            config.util.makeHidden( config, 'mqtt' );
+
+            client.on( 'message', handleMQTTMessage );
+
+            await client.subscribe(
+                config.zones.map( zone => `homes/${( config.autohome || {}).home || 'local'}/zones/${zone.id}/+` ), {
+                    qos: 1
+                });
         } catch( e ) {
             console.error( `Unable to connect to MQTT broker, continuing off-line: ${e.stack}` );
         }
     }
 
     for( let zone of config.zones ) {
-        await loadZone( zone );
+        if( reset ) {
+            await loadZone( zone );
+        }
+
+        await computeTargetsForZone( zone );
 
         for( let input of( zone.devices || [] ).filter(
             x => x.direction === 'input' || x.direction === 'in/out'
