@@ -99,10 +99,6 @@ async function updateZone( zone, updates ) {
 
 async function updateDevice( device, deviceUpdates ) {
     console.log( `Updating configuration for device ${device.name} (${device.id})` );
-    if( device.gpio ) {
-        deviceUpdates.gpio = device.gpio;
-        config.util.makeHidden( deviceUpdates, 'gpio' );
-    }
 
     Object.assign( device, deviceUpdates );
 
@@ -118,12 +114,16 @@ async function updateDevice( device, deviceUpdates ) {
             }
         }
         device.gpio = gpio;
+    }
+
+    if( device.gpio ) {
         config.util.makeHidden( device, 'gpio' );
     }
 }
 
 async function loadZone( zone ) {
-    let devices = zone.devices;
+    zone.devices = zone.devices || [];
+
     if( config.autohome ) {
         try {
             let url = `${config.autohome.url}/api/homes/${config.autohome.home}/zones/${zone.id}`;
@@ -139,20 +139,25 @@ async function loadZone( zone ) {
             let url = `${config.autohome.url}/api/homes/${config.autohome.home}/zones/${zone.id}/devices`;
 
             console.log( `Loading device information from ${url}` );
-            devices = ( await superagent.get( url ).query({ api_key: config.autohome.api_key }) ).body;
+            let updates = ( await superagent.get( url ).query({ api_key: config.autohome.api_key }) ).body;
+            for( let deviceUpdates of ( updates || [] ) ) {
+                let foundDevice = false;
+                for( let device of ( zone.devices || [] ) ) {
+                    if( device.id === deviceUpdates.id && device.gpio ) {
+                        deviceUpdates.gpio = device.gpio;
+                        config.util.makeHidden( deviceUpdates, 'gpio' );
+                    }
+                }
+            }
+
+            zone.devices = updates;
         } catch( e ) {
         }
     }
 
-    for( let deviceUpdates of ( devices || [] ) ) {
-        for( let device of ( zone.devices || [] ) ) {
-            if( device.id === deviceUpdates.id ) {
-                await updateDevice( device, deviceUpdates );
-            }
-        }
+    for( let device of ( zone.devices || [] ) ) {
+        await updateDevice( device, device );
     }
-
-    zone.devices = devices;
 }
 
 async function computeTargetsForZone( zone ) {
