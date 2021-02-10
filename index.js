@@ -110,7 +110,7 @@ async function updateDevice( device, deviceUpdates ) {
                 gpio[pin] = device.gpio[pin];
             } else {
                 console.log( `Constructing GPIO for pin ${pin}` );
-                gpio[pin] = new Gpio( pin, 'out' );
+                gpio[pin] = new Gpio( pin, 'high' );
             }
         }
         device.gpio = gpio;
