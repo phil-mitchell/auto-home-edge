@@ -88,6 +88,7 @@ void DHTSensor::read()
     float threshold;
     Zone &zone = getZone();
 
+    getZone().sendZoneLog( ESP_LOG_INFO, TAG, "DHTSensor::read %s starting", getId() );
     esp_err_t err = dht_read_float_data( _type, _pin, &humidity, &temperature );
     if( !err ) {
         const DeviceCalibration *calibration = findCalibration( "temperature" );
@@ -98,6 +99,7 @@ void DHTSensor::read()
             threshold = DEFAULT_TEMPERATURE_THRESHOLD;
         }
         
+        getZone().sendZoneLog( ESP_LOG_INFO, TAG, "DHTSensor::read %s got temperature %0.1f", getId(), temperature );
         zone.setValue( getId(), "temperature", temperature, "celsius", threshold );
     }
 
@@ -110,6 +112,7 @@ void DHTSensor::read()
             threshold = DEFAULT_HUMIDITY_THRESHOLD;
         }
         
+        getZone().sendZoneLog( ESP_LOG_INFO, TAG, "DHTSensor::read %s got humidity %0.1f", getId(), humidity );
         zone.setValue( getId(), "humidity", humidity, "percent", threshold );
     }
 
@@ -131,6 +134,9 @@ void DHTSensor::read()
             threshold = DEFAULT_HUMIDEX_THRESHOLD;
         }
         
+        getZone().sendZoneLog( ESP_LOG_INFO, TAG, "DHTSensor::read %s got humidex %0.1f", getId(), humidex );
         zone.setValue( getId(), "humidex", humidex, "", threshold );
+    } else {
+        getZone().sendZoneLog( ESP_LOG_ERROR, TAG, "DHTSensor::read %s got error %d: %s", getId(), err, esp_err_to_name( err ) );
     }
 }

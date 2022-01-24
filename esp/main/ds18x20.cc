@@ -31,47 +31,52 @@ esp_err_t DS18X20Sensor::init( gpio_num_t pin, ds18x20_addr_t addr )
 {
     _pin = pin;
     _addr = addr;
-    ESP_LOGI( TAG, "DS18X20Sensor::init %d: %llx", _pin, _addr );
+    getZone().sendZoneLog( ESP_LOG_INFO, TAG, "DS18X20Sensor::init %d: %llx", _pin, _addr );
 
     if( !( BIT( _pin ) & VALID_DEVICE_PIN_MASK ) ) {
-        ESP_LOGE( TAG, "Pin not available for device communication" );
+        getZone().sendZoneLog( ESP_LOG_ERROR, TAG, "Pin not available for device communication" );
         return ESP_FAIL;
     }
 
+    esp_err_t ret = ESP_FAIL;
     if( _addr == ds18x20_ANY ) {
         ds18x20_addr_t addrs[8];
-        int count = ds18x20_scan_devices( _pin, addrs, 8 );
-        if( count < 1 ) {
-            ESP_LOGE( TAG, "Could not find any DS18X20 sensor on pin %d", _pin );
-            return ESP_FAIL;
-        } else if( count > 1 ) {
-            ESP_LOGE( TAG, "Found multiple DS18X20 sensors on pin %d; specify a sensor address", _pin );
-            for( int i = 0; i < count && i < 8; i++ ) {
-                ESP_LOGE( TAG, " - %llx", addrs[i] );
+        for( int retries = 0; ret != ESP_OK && retries < 3; ++retries ) { 
+            int count = ds18x20_scan_devices( _pin, addrs, 8 );
+            if( count < 1 ) {
+                getZone().sendZoneLog( ESP_LOG_ERROR, TAG, "Could not find any DS18X20 sensor on pin %d", _pin );
+            } else if( count > 1 ) {
+                getZone().sendZoneLog( ESP_LOG_ERROR, TAG, "Found multiple DS18X20 sensors on pin %d; specify a sensor address", _pin );
+                for( int i = 0; i < count && i < 8; i++ ) {
+                    getZone().sendZoneLog( ESP_LOG_ERROR, TAG, " - %llx", addrs[i] );
+                }
+            } else {
+                ret = ESP_OK;
+                _addr = addrs[0];
             }
-            return ESP_FAIL;
         }
-        _addr = addrs[0];
+    } else {
+        ret = ESP_OK;
     }
 
-    return ESP_OK;
+    return ret;
 }
 
 void DS18X20Sensor::setInterval( uint32_t interval )
 {
-    ESP_LOGI( TAG, "DS18X20Sensor::setInterval %d (existing task %p)", interval, _task );
+    getZone().sendZoneLog( ESP_LOG_INFO, TAG, "DS18X20Sensor::setInterval %d (existing task %p)", interval, _task );
 
     if( _task != NULL ) {
-        ESP_LOGI( TAG, "Sending notification" );
+        getZone().sendZoneLog( ESP_LOG_DEBUG, TAG, "Sending notification" );
         xTaskNotifyGive( _task );
-        ESP_LOGI( TAG, "Sent notification" );
+        getZone().sendZoneLog( ESP_LOG_DEBUG, TAG, "Sent notification" );
         _task = NULL;
     }
 
     _interval = interval;
     if( _interval > 0 ) {
         xTaskCreate( &dsTask, "dsmonitor", 4096, this, 5, &_task );
-        ESP_LOGI( TAG, "DS18X20Sensor::setInterval %d (created task %p)", interval, _task );
+        getZone().sendZoneLog( ESP_LOG_INFO, TAG, "DS18X20Sensor::setInterval %d (created task %p)", interval, _task );
     }
 }
 
@@ -86,14 +91,24 @@ void DS18X20Sensor::read()
     float threshold = DEFAULT_TEMPERATURE_THRESHOLD;
     Zone &zone = getZone();
 
-    esp_err_t err = ds18x20_measure_and_read( _pin, _addr, &temperature );
-    if( !err ) {
-        const DeviceCalibration *calibration = findCalibration( "temperature" );
-        if( calibration ) {
-            calibration->adjust( temperature );
-            threshold = calibration->doubleThreshold();
-        }
+    getZone().sendZoneLog( ESP_LOG_INFO, TAG, "DS18X20Sensor::read %s starting", getId() );
+
+    for( int i = 0; i < 3; ++i ) {
+        esp_err_t err = ds18x20_measure_and_read( _pin, _addr, &temperature );
+        if( !err ) {
+            const DeviceCalibration *calibration = findCalibration( "temperature" );
+            if( calibration ) {
+                calibration->adjust( temperature );
+                threshold = calibration->doubleThreshold();
+            }
         
-        zone.setValue( getId(), "temperature", temperature, "celsius", threshold );
+            getZone().sendZoneLog( ESP_LOG_INFO, TAG, "DS18X20Sensor::read %s got value %0.1f", getId(), temperature );
+
+            zone.setValue( getId(), "temperature", temperature, "celsius", threshold );
+            break;
+        } else {
+            getZone().sendZoneLog( ESP_LOG_ERROR, TAG, "DS18X20Sensor::read %s got error %d: %s", getId(), err, esp_err_to_name( err ) );
+        }
     }
 }
+

@@ -24,7 +24,7 @@ Zone::Zone( MQTTClient &client, const char *homeId, const char *zoneId )
         _zoneId[0] = '\0';
     }
     
-    ESP_LOGI( TAG, "Created zone with home %s and zone %s", _homeId, _zoneId );
+    sendZoneLog( ESP_LOG_DEBUG, TAG, "Created zone with home %s and zone %s", _homeId, _zoneId );
 }
 
 Zone::~Zone()
@@ -169,25 +169,25 @@ void Zone::configureZoneDeviceJSON( const char *deviceId, cJSON *json )
     
     if( strcmp( interfaceType->valuestring, "dht11" ) == 0 ) {
         if( !device ) {
-            ESP_LOGI( TAG, "Creating new DHT11 sensor" );
+            sendZoneLog( ESP_LOG_INFO, TAG, "Creating new DHT11 sensor" );
             device = new DHTSensor( *this, deviceId );
         }
-        ESP_LOGI( TAG, "Initializing DHT11 sensor" );
+        sendZoneLog( ESP_LOG_INFO, TAG, "Initializing DHT11 sensor" );
         esp_err_t res = ((DHTSensor*)device)->init( (gpio_num_t)atoi( interfaceAddress->valuestring ), DHT_TYPE_DHT11, false );
         if( res != ESP_OK ) {
-            ESP_LOGI( TAG, "Failed to initialize device %s: %d", deviceId, res );
+            sendZoneLog( ESP_LOG_ERROR, TAG, "Failed to initialize device %s: %d", deviceId, res );
             delete device;
             device = NULL;
         }
     } else if( strcmp( interfaceType->valuestring, "dht22" ) == 0 ) {
         if( !device ) {
-            ESP_LOGI( TAG, "Creating new DHT22 sensor" );
+            sendZoneLog( ESP_LOG_INFO, TAG, "Creating new DHT22 sensor" );
             device = new DHTSensor( *this, deviceId );
         }
-        ESP_LOGI( TAG, "Initializing DHT22 sensor" );
+        sendZoneLog( ESP_LOG_INFO, TAG, "Initializing DHT22 sensor" );
         esp_err_t res = ((DHTSensor*)device)->init( (gpio_num_t)atoi( interfaceAddress->valuestring ), DHT_TYPE_AM2301, false );
         if( res != ESP_OK ) {
-            ESP_LOGI( TAG, "Failed to initialize device %s: %d", deviceId, res );
+            sendZoneLog( ESP_LOG_ERROR, TAG, "Failed to initialize device %s: %d", deviceId, res );
             delete device;
             device = NULL;
         }
@@ -205,14 +205,16 @@ void Zone::configureZoneDeviceJSON( const char *deviceId, cJSON *json )
         }
 
         if( !device ) {
-            ESP_LOGI( TAG, "Creating new DS18x20 sensor" );
+            sendZoneLog( ESP_LOG_INFO, TAG, "Creating new DS18x20 sensor" );
             device = new DS18X20Sensor( *this, deviceId );
+        } else {
+            ((DS18X20Sensor*)device)->setInterval( 0 );
         }
 
-        ESP_LOGI( TAG, "Initializing DS18x20 sensor" );
+        sendZoneLog( ESP_LOG_INFO, TAG, "Initializing DS18x20 sensor" );
         esp_err_t res = ((DS18X20Sensor*)device)->init( pin, dsAddr );
         if( res != ESP_OK ) {
-            ESP_LOGI( TAG, "Failed to initialize device %s: %d", deviceId, res );
+            sendZoneLog( ESP_LOG_ERROR, TAG, "Failed to initialize device %s: %d", deviceId, res );
             delete device;
             device = NULL;
         }
@@ -220,28 +222,28 @@ void Zone::configureZoneDeviceJSON( const char *deviceId, cJSON *json )
         free( address );
     } else if( strcmp( interfaceType->valuestring, "gpio" ) == 0 ) {
         if( !device ) {
-            ESP_LOGI( TAG, "Creating new switch" );
+            sendZoneLog( ESP_LOG_INFO, TAG, "Creating new switch" );
             device = new Switch( *this, deviceId );
         }
-        ESP_LOGI( TAG, "Initializing switch" );
+        sendZoneLog( ESP_LOG_INFO, TAG, "Initializing switch" );
         esp_err_t res = ((Switch*)device)->init( (gpio_num_t)atoi( interfaceAddress->valuestring ) );
         if( res != ESP_OK ) {
-            ESP_LOGI( TAG, "Failed to initialize device %s: %d", deviceId, res );
+            sendZoneLog( ESP_LOG_ERROR, TAG, "Failed to initialize device %s: %d", deviceId, res );
             delete device;
             device = NULL;
         }
     } else {
-        ESP_LOGI( TAG, "Unknown device type %s", interfaceType->valuestring );
+        sendZoneLog( ESP_LOG_WARN, TAG, "Unknown device type %s", interfaceType->valuestring );
     }
 
     if( device != NULL ) {
         cJSON *changes = cJSON_GetObjectItemCaseSensitive( json, "changes" );
         if( changes != NULL && cJSON_IsArray( changes ) ) {
             device->clearChanges();
-            ESP_LOGI( TAG, "Adding changes" );
+            sendZoneLog( ESP_LOG_INFO, TAG, "Adding changes" );
             int numChanges = cJSON_GetArraySize( changes );
             for( int i = 0; i < numChanges; ++i ) {
-                ESP_LOGI( TAG, "Adding change %d of %d", i, numChanges );
+                sendZoneLog( ESP_LOG_INFO, TAG, "Adding change %d of %d", i, numChanges );
                 device->addChange( cJSON_GetArrayItem( changes, i ) );
             }
         }
@@ -251,10 +253,10 @@ void Zone::configureZoneDeviceJSON( const char *deviceId, cJSON *json )
         cJSON *calibrations = cJSON_GetObjectItemCaseSensitive( json, "calibrations" );
         if( calibrations != NULL && cJSON_IsArray( calibrations ) ) {
             device->clearCalibrations();
-            ESP_LOGI( TAG, "Adding calibrations" );
+            sendZoneLog( ESP_LOG_INFO, TAG, "Adding calibrations" );
             int numCalibrations = cJSON_GetArraySize( calibrations );
             for( int i = 0; i < numCalibrations; ++i ) {
-                ESP_LOGI( TAG, "Adding calibration %d of %d", i, numCalibrations );
+                sendZoneLog( ESP_LOG_INFO, TAG, "Adding calibration %d of %d", i, numCalibrations );
                 device->addCalibration( cJSON_GetArrayItem( calibrations, i ) );
             }
         }
@@ -262,10 +264,10 @@ void Zone::configureZoneDeviceJSON( const char *deviceId, cJSON *json )
 
     if( device != NULL ) {
         if( interval != NULL && cJSON_IsNumber( interval ) ) {
-            ESP_LOGI( TAG, "Setting update interval for device %s to %d", deviceId, interval->valueint );
+            sendZoneLog( ESP_LOG_INFO, TAG, "Setting update interval for device %s to %d", deviceId, interval->valueint );
             device->setInterval( interval->valueint );
         } else {
-            ESP_LOGI( TAG, "Setting update interval for device %s to default", deviceId );
+            sendZoneLog( ESP_LOG_INFO, TAG, "Setting update interval for device %s to default", deviceId );
             device->setInterval( 60000 );
         }
     }
@@ -285,13 +287,13 @@ void Zone::configureZoneJSON( const char **path, size_t pathlen, cJSON *json )
         bool isConfig = strcmp( type, "config" ) == 0;
 
         if( local && isConfig ) {
-            ESP_LOGI( TAG, "Configuring device with id %s", deviceId );
+            sendZoneLog( ESP_LOG_INFO, TAG, "Configuring device with id %s", deviceId );
             configureZoneDeviceJSON( deviceId, json );
         } else if( !local && !isConfig ) {
             setRemoteValueJSON( path[1], path[3], deviceId, type, json );
         }
     } else if( local && pathlen == 5 && strcmp( path[4], "config" ) == 0 ) {
-        ESP_LOGI( TAG, "Configuring zone details for %s", _zoneId );
+        sendZoneLog( ESP_LOG_INFO, TAG, "Configuring zone details for %s", _zoneId );
         cJSON *schedules = cJSON_GetObjectItem( json, "schedules" );
         if( schedules && cJSON_IsArray( schedules ) ) {
             clearSchedules();
@@ -314,16 +316,17 @@ void Zone::configureZoneJSON( const char **path, size_t pathlen, cJSON *json )
 
 void Zone::setRemoteValueJSON( const char *homeId, const char *zoneId, const char *deviceId, const char *type, cJSON *json )
 {
-    ESP_LOGI( TAG, "Processing remote %s value for home %s zone %s device %s", type, homeId, zoneId, deviceId );
+    sendZoneLog( ESP_LOG_DEBUG, TAG, "Processing remote %s value for home %s zone %s device %s", type, homeId, zoneId, deviceId );
 }
 
 void Zone::sendDeviceReadingJSON( const char *deviceId, const char *type, cJSON *value, cJSON *target, cJSON *threshold )
 {
     time_t now;
+    struct tm gmnow;
     char buf[ sizeof( "2011-10-08T07:07:09Z" ) ];
 
     time( &now );
-    strftime( buf, sizeof( buf ), "%FT%TZ", gmtime( &now ) );
+    strftime( buf, sizeof( buf ), "%FT%TZ", gmtime_r( &now, &gmnow ) );
     
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject( root, "time", buf );
@@ -355,35 +358,104 @@ void Zone::sendDeviceReadingJSON( const char *deviceId, const char *type, cJSON 
     free( message );
 }
 
+void Zone::sendZoneLog( esp_log_level_t level, const char *tag, const char *format... ) const
+{
+    time_t now;
+    struct tm gmnow;
+    char timebuf[ sizeof( "2011-10-08T07:07:09Z" ) ];
+    va_list args;
+
+    time( &now );
+    strftime( timebuf, sizeof( timebuf ), "%FT%TZ", gmtime_r( &now, &gmnow ) );
+    
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject( root, "time", timebuf );
+    cJSON_AddStringToObject( root, "tag", tag );
+
+    switch( level ) {
+    case ESP_LOG_NONE:
+        cJSON_AddStringToObject( root, "level", "NONE" );
+        break;
+    case ESP_LOG_ERROR:
+        cJSON_AddStringToObject( root, "level", "ERROR" );
+        break;
+    case ESP_LOG_WARN:
+        cJSON_AddStringToObject( root, "level", "WARN" );
+        break;
+    case ESP_LOG_INFO:
+        cJSON_AddStringToObject( root, "level", "INFO" );
+        break;
+    case ESP_LOG_DEBUG:
+        cJSON_AddStringToObject( root, "level", "DEBUG" );
+        break;
+    case ESP_LOG_VERBOSE:
+        cJSON_AddStringToObject( root, "level", "VERBOSE" );
+        break;
+    default:
+        cJSON_AddStringToObject( root, "level", "UNKNOWN" );
+    };
+
+    char *buffer = (char*)malloc( 512 );
+    if( buffer != NULL ) {
+        va_start( args, format );
+        vsnprintf( buffer, 512, format, args );
+        va_end( args );
+
+        esp_log_write( level, tag, buffer );
+
+        cJSON_AddStringToObject( root, "message", buffer );
+        free( buffer );
+    } else {
+       cJSON_AddStringToObject( root, "message", "INSUFFICIENT MEMORY" );
+    }
+
+    char *message = cJSON_PrintUnformatted( root );
+    cJSON_Delete( root );
+
+    char *topic = (char*)malloc( 256 );
+    if( topic != NULL ) {
+        snprintf( topic, 255, "homes/%s/zones/%s/log", _homeId, _zoneId );
+        topic[255] = '\0';
+
+        _client.publish( topic, message, 0, false );
+        free( topic );
+    }
+    
+    free( message );
+}
+
 const DeviceTarget* Zone::findDeviceTarget( const char *deviceId, const char *type ) const
 {
     time_t now;
     time( &now );
 
-    ESP_LOGI( TAG, "Looking for override for time %ld", now );
+    sendZoneLog( ESP_LOG_DEBUG, TAG, "Looking for override for time %ld", now );
     
     const DeviceTarget *target = NULL;
 
     for( OverrideList::const_iterator s = _overrides.cbegin(); s != _overrides.cend(); ++s ) {
-        ESP_LOGI( TAG, "Checking override for %ld -> %ld", s->getStart(), s->getEnd() );
+        sendZoneLog( ESP_LOG_DEBUG, TAG, "Checking override for %ld -> %ld", s->getStart(), s->getEnd() );
         if( s->getStart() <= now && s->getEnd() > now ) {
-            ESP_LOGI( TAG, "Checking if override matches device" );
+            sendZoneLog( ESP_LOG_DEBUG, TAG, "Checking if override matches device" );
             const DeviceTarget *maybeTarget = s->getTarget( _homeId, _zoneId, deviceId, type );
             if( maybeTarget ) {
-                ESP_LOGI( TAG, "Override matches device" );
+                sendZoneLog( ESP_LOG_DEBUG, TAG, "Override matches device" );
                 target = maybeTarget;
             }
         }
     }
 
     if( !target ) {
-        struct tm *tmnow = localtime( &now );
-        ESP_LOGI( TAG, "Looking for schedule for day %d hour %d minute %d", tmnow->tm_wday, tmnow->tm_hour, tmnow->tm_min );
+        struct tm tmnow;
+        localtime_r( &now, &tmnow );
+        sendZoneLog( ESP_LOG_DEBUG, TAG, "Looking for schedule for day %d hour %d minute %d", tmnow.tm_wday, tmnow.tm_hour, tmnow.tm_min );
         for( ScheduleList::const_iterator s = _schedules.cbegin(); s != _schedules.cend(); ++s ) {
-            if( s->getDays() & BIT( tmnow->tm_wday ) &&
-                ( s->getHour() < tmnow->tm_hour || (
-                    s->getHour() == tmnow->tm_hour  &&
-                    s->getMinute() <= tmnow->tm_min ) ) ) {
+            sendZoneLog( ESP_LOG_DEBUG, TAG, "Checking schedule hour %d minute %d against hour %d minute %d", s->getHour(), s->getMinute(), tmnow.tm_hour, tmnow.tm_min );
+            if( s->getDays() & BIT( tmnow.tm_wday ) &&
+                ( s->getHour() < tmnow.tm_hour || (
+                    s->getHour() == tmnow.tm_hour  &&
+                    s->getMinute() <= tmnow.tm_min ) ) ) {
+                sendZoneLog( ESP_LOG_DEBUG, TAG, "Schedule matches!" );
                 const DeviceTarget *maybeTarget = s->getTarget( _homeId, _zoneId, deviceId, type );
                 if( maybeTarget ) {
                     target = maybeTarget;
@@ -471,22 +543,22 @@ void Zone::setValue( const char *deviceId, const char *type, bool value )
 
 void Zone::takeAction( const char *homeId, const char *zoneId, const char *deviceId, const char *type, double value, const char *unit, double targetValue, const char *targetUnit, double threshold )
 {
-    ESP_LOGI( TAG, "Taking action for %s value for home %s zone %s device %s", type, homeId, zoneId, deviceId );
+    sendZoneLog( ESP_LOG_INFO, TAG, "Taking action for %s value for home %s zone %s device %s", type, homeId, zoneId, deviceId );
     if( value >= ( targetValue - threshold ) && value <= ( targetValue + threshold ) ) {
-        ESP_LOGI( TAG, "%s value for home %s zone %s device %s is within threshold", type, homeId, zoneId, deviceId );
+        sendZoneLog( ESP_LOG_INFO, TAG, "%s value for home %s zone %s device %s is within threshold", type, homeId, zoneId, deviceId );
         return;
     }
 
     for( DeviceList::iterator device = _devices.begin(); device != _devices.end(); ++device ) {
-        ESP_LOGI( TAG, "Checking device %s", (*device)->getId() );
+        sendZoneLog( ESP_LOG_INFO, TAG, "Checking device %s", (*device)->getId() );
         const DeviceChangeList &changes = (*device)->getChanges();
         for( DeviceChangeList::const_iterator change = changes.cbegin(); change != changes.cend(); ++change ) {
             if( change->matches( homeId, zoneId, deviceId, type ) ) {
                 if( ( change->getDirection() > 0 ) == ( value < targetValue ) ) {
-                    ESP_LOGI( TAG, "device %s turning ON", (*device)->getId() );
+                    sendZoneLog( ESP_LOG_INFO, TAG, "device %s turning ON", (*device)->getId() );
                     (*device)->on();
                 } else {
-                    ESP_LOGI( TAG, "device %s turning OFF", (*device)->getId() );
+                    sendZoneLog( ESP_LOG_INFO, TAG, "device %s turning OFF", (*device)->getId() );
                     (*device)->off();
                 }
             }
@@ -496,9 +568,9 @@ void Zone::takeAction( const char *homeId, const char *zoneId, const char *devic
 
 void Zone::takeAction( const char *homeId, const char *zoneId, const char *deviceId, const char *type, int value, const char *unit, int targetValue, const char *targetUnit, int threshold )
 {
-    ESP_LOGI( TAG, "Taking action for %s value for home %s zone %s device %s", type, homeId, zoneId, deviceId );
+    sendZoneLog( ESP_LOG_INFO, TAG, "Taking action for %s value for home %s zone %s device %s", type, homeId, zoneId, deviceId );
     if( value >= ( targetValue - threshold ) && value <= ( targetValue + threshold ) ) {
-        ESP_LOGI( TAG, "%s value for home %s zone %s device %s is within threshold", type, homeId, zoneId, deviceId );
+        sendZoneLog( ESP_LOG_INFO, TAG, "%s value for home %s zone %s device %s is within threshold", type, homeId, zoneId, deviceId );
         return;
     }
 
@@ -507,10 +579,10 @@ void Zone::takeAction( const char *homeId, const char *zoneId, const char *devic
         for( DeviceChangeList::const_iterator change = changes.cbegin(); change != changes.cend(); ++change ) {
             if( change->matches( homeId, zoneId, deviceId, type ) ) {
                 if( ( change->getDirection() > 0 ) == ( value < targetValue ) ) {
-                    ESP_LOGI( TAG, "device %s turning ON", (*device)->getId() );
+                    sendZoneLog( ESP_LOG_INFO, TAG, "device %s turning ON", (*device)->getId() );
                     (*device)->on();
                 } else {
-                    ESP_LOGI( TAG, "device %s turning OFF", (*device)->getId() );
+                    sendZoneLog( ESP_LOG_INFO, TAG, "device %s turning OFF", (*device)->getId() );
                     (*device)->off();
                 }
             }
@@ -520,9 +592,9 @@ void Zone::takeAction( const char *homeId, const char *zoneId, const char *devic
 
 void Zone::takeAction( const char *homeId, const char *zoneId, const char *deviceId, const char *type, bool value, bool targetValue )
 {
-    ESP_LOGI( TAG, "Taking action for %s value for home %s zone %s device %s", type, homeId, zoneId, deviceId );
+    sendZoneLog( ESP_LOG_INFO, TAG, "Taking action for %s value for home %s zone %s device %s", type, homeId, zoneId, deviceId );
     if( value == targetValue ) {
-        ESP_LOGI( TAG, "%s value for home %s zone %s device %s matches target", type, homeId, zoneId, deviceId );
+        sendZoneLog( ESP_LOG_INFO, TAG, "%s value for home %s zone %s device %s matches target", type, homeId, zoneId, deviceId );
         return;
     }
 
@@ -531,10 +603,10 @@ void Zone::takeAction( const char *homeId, const char *zoneId, const char *devic
         for( DeviceChangeList::const_iterator change = changes.cbegin(); change != changes.cend(); ++change ) {
             if( change->matches( homeId, zoneId, deviceId, type ) ) {
                 if( ( change->getDirection() > 0 ) == ( value < targetValue ) ) {
-                    ESP_LOGI( TAG, "device %s turning ON", (*device)->getId() );
+                    sendZoneLog( ESP_LOG_INFO, TAG, "device %s turning ON", (*device)->getId() );
                     (*device)->on();
                 } else {
-                    ESP_LOGI( TAG, "device %s turning OFF", (*device)->getId() );
+                    sendZoneLog( ESP_LOG_INFO, TAG, "device %s turning OFF", (*device)->getId() );
                     (*device)->off();
                 }
             }
@@ -583,7 +655,7 @@ Schedule::Schedule( cJSON *json, const char *defaultHomeId, const char *defaultZ
         }
     }
 
-    ESP_LOGI( TAG, "Created schedule for days %x starting at %02d:%02d", _days, _hour, _minute ); 
+    ESP_LOGD( TAG, "Created schedule for days %x starting at %02d:%02d", _days, _hour, _minute ); 
 }
 
 Schedule::~Schedule()
@@ -637,7 +709,7 @@ Override::Override( cJSON *json, const char *defaultHomeId, const char *defaultZ
         }
     }
 
-    ESP_LOGI( TAG, "Created override for %ld to %ld", _start, _end );
+    ESP_LOGD( TAG, "Created override for %ld to %ld", _start, _end );
 }
 
 Override::~Override()
@@ -730,7 +802,7 @@ DeviceTarget::DeviceTarget( cJSON *json, const char *defaultHomeId, const char *
 
 bool DeviceTarget::matches( const char *homeId, const char *zoneId, const char *deviceId, const char *type ) const
 {
-    ESP_LOGI( TAG, "Checking %s == %s && %s == %s && %s == %s && %s == %s", _homeId, homeId, _zoneId, zoneId, _deviceId, deviceId, _type, type );
+    ESP_LOGD( TAG, "Checking %s == %s && %s == %s && %s == %s && %s == %s", _homeId, homeId, _zoneId, zoneId, _deviceId, deviceId, _type, type );
     return( strcmp( _homeId, homeId ) == 0 && strcmp( _zoneId, zoneId ) == 0 &&
             strcmp( _deviceId, deviceId ) == 0 && ( _type[0] == '\0' || strcmp( _type, type ) == 0 ) );
 }

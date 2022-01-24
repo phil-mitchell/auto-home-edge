@@ -130,12 +130,14 @@ esp_err_t Switch::init( gpio_num_t pin )
 
 void Switch::on()
 {
+    getZone().sendZoneLog( ESP_LOG_DEBUG, TAG, "Switch::on %d", getId() );
     _toggle.on();
     getZone().setValue( getId(), "switch", true );
 }
 
 void Switch::off()
 {
+    getZone().sendZoneLog( ESP_LOG_DEBUG, TAG, "Switch::off %d", getId() );
     _toggle.off();
     getZone().setValue( getId(), "switch", false );
 }

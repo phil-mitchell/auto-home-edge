@@ -124,7 +124,7 @@ DeviceChange::DeviceChange( cJSON *json, const char *defaultHomeId, const char *
 
 bool DeviceChange::matches( const char *homeId, const char *zoneId, const char *deviceId, const char *type ) const
 {
-    ESP_LOGI( TAG, "Checking change %s %s %s %s -> %s %s %s %s", _homeId, _zoneId, _deviceId, _type, homeId, zoneId, deviceId, type );
+    ESP_LOGD( TAG, "Checking change %s %s %s %s -> %s %s %s %s", _homeId, _zoneId, _deviceId, _type, homeId, zoneId, deviceId, type );
     return( strcmp( _homeId, homeId ) == 0 && strcmp( _zoneId, zoneId ) == 0 &&
             strcmp( _deviceId, deviceId ) == 0 && ( _type[0] == '\0' || strcmp( _type, type ) == 0 ) );
 }
@@ -187,7 +187,7 @@ DeviceCalibration::DeviceCalibration( cJSON *json )
 
 bool DeviceCalibration::matches( const char *type ) const
 {
-    ESP_LOGI( TAG, "Checking calibration %s -> %s", _type, type );
+    ESP_LOGD( TAG, "Checking calibration %s -> %s", _type, type );
     return( strcmp( _type, type ) == 0 );
 }
 

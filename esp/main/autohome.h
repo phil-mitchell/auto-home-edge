@@ -318,6 +318,8 @@ public:
     void clearOverrides();
     
     Device *getDevice( const char *deviceId );
+
+    void sendZoneLog( esp_log_level_t level, const char *tag, const char *pattern... ) const;
 };
 
 class DHTSensor : public Device
